@@ -1,0 +1,4 @@
+Release signing and build cleanup.
+
+- Build signed release APKs from the local ignored Haven release keystore properties.
+- Quiet the File Shuttle document provider unchecked AIDL collection warning.

@@ -1,3 +1,9 @@
+0.1.3
+===
+
+- Added Gradle release signing from the local ignored release keystore properties.
+- Quieted the File Shuttle document provider unchecked AIDL collection warning.
+
 1.9.1 (445)
 ===
 

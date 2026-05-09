@@ -135,6 +135,7 @@ public class CrossProfileDocumentsProvider extends DocumentsProvider {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Cursor queryDocument(String documentId, String[] projection) {
         ensureServiceBound();
         final MatrixCursor result = new MatrixCursor(projection == null ? DEFAULT_DOCUMENT_PROJECTION : projection);
@@ -149,6 +150,7 @@ public class CrossProfileDocumentsProvider extends DocumentsProvider {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) {
         ensureServiceBound();
         List<Map<String, Serializable>> files;
