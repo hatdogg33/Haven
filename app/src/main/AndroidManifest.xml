@@ -22,6 +22,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.NFC" />
 
+    <permission
+        android:name="io.github.kennethchoinfosec.haven.permission.INTERNAL_PROFILE_IPC"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.kennethchoinfosec.haven.permission.INTERNAL_PROFILE_IPC" />
+
     <!-- For querying apps on Android R and later -->
     <queries>
         <intent>
@@ -66,6 +71,7 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:theme="@style/Theme.Haven.Translucent.NoTitleBar"
+            android:permission="io.github.kennethchoinfosec.haven.permission.INTERNAL_PROFILE_IPC"
             android:exported="true">
             <intent-filter>
                 <action android:name="io.github.kennethchoinfosec.haven.action.FINALIZE_PROVISION" />

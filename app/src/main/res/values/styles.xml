@@ -67,6 +67,16 @@
     <style name="ToolbarTheme" parent="ThemeOverlay.Material3Expressive.Toolbar.Surface">
         <item name="android:textColorPrimary">@color/md_theme_primary</item>
         <item name="colorOnSurface">@color/md_theme_primary</item>
+        <item name="popupMenuStyle">@style/Widget.Haven.PopupMenu</item>
+        <item name="actionOverflowMenuStyle">@style/Widget.Haven.PopupMenu.Overflow</item>
+    </style>
+
+    <style name="Widget.Haven.PopupMenu" parent="Widget.AppCompat.PopupMenu">
+        <item name="android:popupBackground">@color/md_theme_surface</item>
+    </style>
+
+    <style name="Widget.Haven.PopupMenu.Overflow" parent="Widget.AppCompat.PopupMenu.Overflow">
+        <item name="android:popupBackground">@color/md_theme_surface</item>
     </style>
 
     <style name="Widget.Haven.Toolbar" parent="Widget.Material3Expressive.Toolbar">

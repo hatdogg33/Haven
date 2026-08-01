@@ -1,3 +1,10 @@
+0.1.4
+===
+
+- Hardened cross-profile IPC against untrusted work-profile applications.
+- Protected the exported cross-profile activity with a signature-level permission.
+- Hardened authentication key initialization, action binding, timestamp validation, and signature comparison.
+
 0.1.3
 ===
 

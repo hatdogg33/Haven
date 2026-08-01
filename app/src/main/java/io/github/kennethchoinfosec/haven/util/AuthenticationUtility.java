@@ -4,29 +4,29 @@ import android.content.Intent;
 
 import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-// Opening access to actions across the profile boundary poses a security risk
+// Opening access to actions across the profile boundary poses a security risk.
 // The risk is that other applications might also be able to start our activities
 // through system's IntentForwarderActivity
 // That activity runs in the system process, thus normal limitations like "permissions"
 // and "exported" will not work.
-// This class tries to fix it by appending a timestamp and a signature of the timestamp
-// to our own Intents sent through the boundary, ensuring that only Haven can invoke
-// its high-privilege functions across that boundary, assuming that no other application
-// would be able to access Haven's internal storage to gain access to the private key.
-// The private key is generated the first time this class is used, and then shared
-// across the profile boundary. Haven will always trust the first key it receives.
+// This class adds a timestamp and a signature to our own Intents sent through the boundary.
+// The exported activity is separately protected by a signature-level permission; this HMAC
+// is defense in depth and must never be used as the sole authorization mechanism.
 public class AuthenticationUtility {
-    public static void signIntent(Intent intent) {
+    public static synchronized void signIntent(Intent intent) {
         String key = LocalStorageManager.getInstance().getString(
                 LocalStorageManager.PREF_AUTH_KEY);
-        if (key == null) {
+        if (!isValidKey(key)) {
             // Generate the key if we don't have one yet
             try {
                 KeyGenerator keyGen = KeyGenerator.getInstance("HmacSHA256");
@@ -43,50 +43,105 @@ public class AuthenticationUtility {
             intent.putExtra("auth_key", key);
         } else {
             long timestamp = new Date().getTime();
+            String nonce = UUID.randomUUID().toString();
             intent.putExtra("timestamp", timestamp);
-            intent.putExtra("signature", sign(key, timestamp));
+            intent.putExtra("nonce", nonce);
+            intent.putExtra("signature", sign(key, intent.getAction(), timestamp, nonce));
         }
     }
 
-    public static boolean checkIntent(Intent intent) {
+    public static synchronized boolean checkIntent(Intent intent) {
         String key = LocalStorageManager.getInstance().getString(
                 LocalStorageManager.PREF_AUTH_KEY);
-        if (key == null) {
-            // If we haven't got a key yet, we just take the key sent by the other side
-            // If not, NEVER receive any key because it can be fake.
-            // We only trust the first key we receive
-            if (intent.hasExtra("auth_key")) {
+        if (!isValidKey(key)) {
+            // The activity's signature-level permission authenticates the sender during
+            // bootstrap. Never accept malformed or missing keys into persistent storage.
+            String receivedKey = intent.getStringExtra("auth_key");
+            if (isValidKey(receivedKey)) {
                 LocalStorageManager.getInstance().setString(
-                        LocalStorageManager.PREF_AUTH_KEY, intent.getStringExtra("auth_key"));
+                        LocalStorageManager.PREF_AUTH_KEY, receivedKey);
                 return true;
             } else {
-                // We haven't got a key, and we can't check if it is true or not.
                 return false;
             }
         } else {
             long timestamp = new Date().getTime();
             long intentTimestamp = intent.getLongExtra("timestamp", 0);
-            return timestamp - intentTimestamp < 30 * 1000 &&
-                    sign(key, intentTimestamp).equals(intent.getStringExtra("signature"));
+            long age = timestamp - intentTimestamp;
+            if (age < 0 || age > 30 * 1000) return false;
+
+            String nonce = intent.getStringExtra("nonce");
+            if (nonce == null || nonce.length() > 128) return false;
+
+            String expected = sign(key, intent.getAction(), intentTimestamp, nonce);
+            String received = intent.getStringExtra("signature");
+            boolean valid = received != null && MessageDigest.isEqual(
+                    expected.getBytes(StandardCharsets.UTF_8),
+                    received.getBytes(StandardCharsets.UTF_8));
+            return valid && consumeNonce(nonce, timestamp);
         }
     }
 
-    public static void reset() {
+    public static synchronized void reset() {
         LocalStorageManager.getInstance().remove(LocalStorageManager.PREF_AUTH_KEY);
+        LocalStorageManager.getInstance().remove(LocalStorageManager.PREF_AUTH_NONCES);
     }
 
-    private static String sign(String hexKey, long timestamp) {
+    private static String sign(String hexKey, String action, long timestamp, String nonce) {
         try {
             SecretKeySpec keySpec = new SecretKeySpec(hexStringToByteArray(hexKey), "HmacSHA256");
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(keySpec);
-            return bytesToHex(mac.doFinal(longToBytes(timestamp)));
+            byte[] actionBytes = action == null ? new byte[0] : action.getBytes(StandardCharsets.UTF_8);
+            byte[] nonceBytes = nonce == null ? new byte[0] : nonce.getBytes(StandardCharsets.UTF_8);
+            ByteBuffer buffer = ByteBuffer.allocate(4 + actionBytes.length + Long.BYTES + 4 + nonceBytes.length);
+            buffer.putInt(actionBytes.length);
+            buffer.put(actionBytes);
+            buffer.putLong(timestamp);
+            buffer.putInt(nonceBytes.length);
+            buffer.put(nonceBytes);
+            return bytesToHex(mac.doFinal(buffer.array()));
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             throw new RuntimeException("WTF?");
         }
     }
 
     final private static char[] hexArray = "0123456789ABCDEF".toCharArray();
+
+    private static boolean isValidKey(String key) {
+        return key != null && key.length() == 64 && key.matches("[0-9A-Fa-f]{64}");
+    }
+
+    private static boolean consumeNonce(String nonce, long now) {
+        String stored = LocalStorageManager.getInstance().getString(
+                LocalStorageManager.PREF_AUTH_NONCES);
+        StringBuilder retained = new StringBuilder();
+        boolean alreadySeen = false;
+        if (stored != null && !stored.isEmpty()) {
+            for (String entry : stored.split(",")) {
+                int separator = entry.lastIndexOf(':');
+                if (separator <= 0) continue;
+                String savedNonce = entry.substring(0, separator);
+                try {
+                    long savedAt = Long.parseLong(entry.substring(separator + 1));
+                    if (now - savedAt <= 30 * 1000) {
+                        if (savedNonce.equals(nonce)) alreadySeen = true;
+                        if (retained.length() > 0) retained.append(',');
+                        retained.append(entry);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Discard malformed cache entries.
+                }
+            }
+        }
+        if (alreadySeen) return false;
+        if (retained.length() > 0) retained.append(',');
+        retained.append(nonce).append(':').append(now);
+        LocalStorageManager.getInstance().setString(
+                LocalStorageManager.PREF_AUTH_NONCES, retained.toString());
+        return true;
+    }
+
     private static String bytesToHex(byte[] bytes) {
         char[] hexChars = new char[bytes.length * 2];
         for (int j = 0; j < bytes.length; j++) {
@@ -116,9 +171,4 @@ public class AuthenticationUtility {
         }
     }
 
-    private static byte[] longToBytes(long x) {
-        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-        buffer.putLong(x);
-        return buffer.array();
-    }
 }

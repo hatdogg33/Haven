@@ -210,8 +210,9 @@ public class DummyActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
 
-        if (intent.getAction().equals(PACKAGEINSTALLER_CALLBACK)) {
+        if (PACKAGEINSTALLER_CALLBACK.equals(intent.getAction())) {
             int status = intent.getExtras().getInt(PackageInstaller.EXTRA_STATUS);
 
             switch (status) {

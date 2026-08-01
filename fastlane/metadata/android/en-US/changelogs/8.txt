@@ -1,0 +1,4 @@
+Hardened cross-profile IPC against untrusted work-profile applications.
+
+- Protected the cross-profile activity with a signature-level permission.
+- Hardened authentication key initialization and request validation.
