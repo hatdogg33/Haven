@@ -63,7 +63,6 @@ public class SetupWizardActivity extends AppCompatActivity {
                 + " DISALLOW_ADD_USER=" + restrictions.getBoolean(UserManager.DISALLOW_ADD_USER)
                 + " DISALLOW_ADD_MANAGED_PROFILE=" + restrictions.getBoolean(UserManager.DISALLOW_ADD_MANAGED_PROFILE)
                 + " DISALLOW_MODIFY_ACCOUNTS=" + restrictions.getBoolean(UserManager.DISALLOW_MODIFY_ACCOUNTS)
-                + " userCount=" + um.getUserCount()
                 + " users=[" + android.text.TextUtils.join(",", um.getUserProfiles()) + "]");
         // The user could click on the "finish provisioning" notification while having removed
         // this activity from the recents stack, in which case the notification will start a new
