@@ -370,7 +370,7 @@ public final class BinaryAXML {
         return new Chunk(RES_STRING_POOL_TYPE, headerSize, payload);
     }
 
-    private byte[] encodeString(String s, boolean utf8) {
+    private byte[] encodeString(String s, boolean utf8) throws IOException {
         if (utf8) {
             byte[] b = s.getBytes(StandardCharsets.UTF_8);
             ByteArrayOutputStream o = new ByteArrayOutputStream();
