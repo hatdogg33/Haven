@@ -20,7 +20,7 @@ public class LocalStorageManager {
     public static final String PREF_BLOCK_CONTACTS_SEARCHING = "block_contacts_searching";
     public static final String PREF_PAYMENT_STUB = "payment_stub";
     public static final String PREF_HIDE_WORK_APPS_FROM_LAUNCHER = "hide_work_apps_from_launcher";
-    public static final String PREF_HIDE_WORK_APPS_APPLIED = "hide_work_apps_applied";
+    public static final String PREF_HIDE_WORK_APPS_VERSION = "hide_work_apps_version";
 
     private static final String LIST_DIVIDER = ",";
 

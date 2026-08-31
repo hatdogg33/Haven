@@ -307,10 +307,12 @@ public class HavenService extends Service {
         mAdminComponent = new ComponentName(getApplicationContext(), HavenDeviceAdminReceiver.class);
 
         // One-time migration: when upgrading to a version with "Hide work apps
-        // from the launcher", hide all existing work apps in the profile
+        // from the launcher", hide all existing user-installed work apps in
+        // the profile and restore any system apps hidden by older builds
         if (mIsProfileOwner
                 && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()
-                && !LocalStorageManager.getInstance().getBoolean(LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED)) {
+                && LocalStorageManager.getInstance().getInt(LocalStorageManager.PREF_HIDE_WORK_APPS_VERSION)
+                    != Utility.HIDE_WORK_APPS_VERSION) {
             Utility.hideWorkAppsFromLauncher(this);
         }
     }

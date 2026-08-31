@@ -145,7 +145,8 @@ public class DummyActivity extends Activity {
             // Guards against app upgrades on devices whose launcher otherwise
             // keeps showing already-cloned work apps.
             if (SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()
-                    && !LocalStorageManager.getInstance().getBoolean(LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED)) {
+                    && LocalStorageManager.getInstance().getInt(LocalStorageManager.PREF_HIDE_WORK_APPS_VERSION)
+                        != Utility.HIDE_WORK_APPS_VERSION) {
                 Utility.hideWorkAppsFromLauncher(this);
             }
 
@@ -596,7 +597,16 @@ public class DummyActivity extends Activity {
             if (getIntent().getBooleanExtra("shouldFreeze", false)) {
                 registerAppToFreeze(packageName);
             }
-            startActivity(launchIntent);
+            // Launch a bit later so that the (now unfrozen) package has time to
+            // become fully visible to the system. On some heavily-modified vendor
+            // ROMs, launching immediately after "unfreezing" results in a stale
+            // black window because the hidden state has not settled yet.
+            final Intent finalLaunchIntent = launchIntent;
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                startActivity(finalLaunchIntent);
+                finish();
+            }, 300);
+            return;
         } else {
             // Acknowledge the user that the application cannot be launched
             Toast.makeText(this, getString(R.string.launch_app_fail, packageName), Toast.LENGTH_SHORT).show();

@@ -48,10 +48,16 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class Utility {
+    // Bumped whenever the "hide work apps from launcher" policy changes,
+    // so that existing installs re-apply the (possibly corrected) policy
+    public static final int HIDE_WORK_APPS_VERSION = 2;
+
     // Determine if the current app is the owner of the current profile
     // TODO: Replace all occurrences of duplicated code to call this function instead
     public static boolean isProfileOwner(Context context) {
@@ -59,27 +65,53 @@ public class Utility {
                 .isProfileOwnerApp(context.getPackageName());
     }
 
-    // Hide all apps in this profile from the launcher, except Haven itself
-    // This allows running everything from inside Haven while keeping
-    // the Work profile (and thus "Work" accounts) fully functional.
-    public static void hideWorkAppsFromLauncher(Context context) {
-        DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
-        ComponentName admin = new ComponentName(context.getApplicationContext(), HavenDeviceAdminReceiver.class);
-        if (!dpm.isProfileOwnerApp(context.getPackageName())) return;
-        PackageManager pm = context.getPackageManager();
-        List<ApplicationInfo> apps = pm.getInstalledApplications(
-                PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
-        for (ApplicationInfo app : apps) {
-            if (app.packageName.equals(context.getPackageName())) continue;
+// Hide all user-installed apps in this profile from the launcher, except Haven
+// itself. This allows running everything from inside Haven while keeping
+// the Work profile (and thus "Work" accounts) fully functional.
+// System infrastructure (Google Play services, keyboards, phone, the default
+// launcher, ...) must NEVER be hidden: doing so breaks the work profile and
+// can leave the user staring at a black screen with GMS gone.
+public static void hideWorkAppsFromLauncher(Context context) {
+    DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
+    ComponentName admin = new ComponentName(context.getApplicationContext(), HavenDeviceAdminReceiver.class);
+    if (!dpm.isProfileOwnerApp(context.getPackageName())) return;
+    PackageManager pm = context.getPackageManager();
+    Set<String> defaultHomes = getDefaultHomePackages(context);
+    List<ApplicationInfo> apps = pm.getInstalledApplications(
+            PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+    for (ApplicationInfo app : apps) {
+        if (app.packageName.equals(context.getPackageName())) continue;
+        boolean isSystem = (app.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+        if (isSystem || defaultHomes.contains(app.packageName)) {
+            // Restore system apps and the default launcher to a visible state
             try {
-                dpm.setApplicationHidden(admin, app.packageName, true);
+                dpm.setApplicationHidden(admin, app.packageName, false);
             } catch (SecurityException ignored) {
                 // Should not happen when we are the profile owner
             }
+            continue;
         }
-        LocalStorageManager.getInstance().setBoolean(
-                LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED, true);
+        try {
+            dpm.setApplicationHidden(admin, app.packageName, true);
+        } catch (SecurityException ignored) {
+            // Should not happen when we are the profile owner
+        }
     }
+    LocalStorageManager.getInstance().setInt(
+            LocalStorageManager.PREF_HIDE_WORK_APPS_VERSION, HIDE_WORK_APPS_VERSION);
+}
+
+// The default launcher(s) of this profile, resolved by the HOME intent
+public static Set<String> getDefaultHomePackages(Context context) {
+    Intent intent = new Intent(Intent.ACTION_MAIN);
+    intent.addCategory(Intent.CATEGORY_HOME);
+    Set<String> homes = new HashSet<>();
+    for (ResolveInfo info : context.getPackageManager().queryIntentActivities(
+            intent, PackageManager.MATCH_DISABLED_COMPONENTS)) {
+        homes.add(info.activityInfo.packageName);
+    }
+    return homes;
+}
 
     // Polyfill for String.join
     public static String stringJoin(String delimiter, String[] list) {
