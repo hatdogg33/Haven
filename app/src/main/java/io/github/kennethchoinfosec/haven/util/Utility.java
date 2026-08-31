@@ -81,25 +81,6 @@ public class Utility {
                 LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED, true);
     }
 
-    // Find the most recently installed app in this profile, excluding Haven itself
-    @Nullable
-    public static String findLatestInstalledPackage(Context context) {
-        String adminPackage = context.getPackageName();
-        PackageManager pm = context.getPackageManager();
-        List<ApplicationInfo> apps = pm.getInstalledApplications(
-                PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
-        long maxTime = Long.MIN_VALUE;
-        String result = null;
-        for (ApplicationInfo app : apps) {
-            if (app.packageName.equals(adminPackage)) continue;
-            if (app.firstInstallTime > maxTime) {
-                maxTime = app.firstInstallTime;
-                result = app.packageName;
-            }
-        }
-        return result;
-    }
-
     // Polyfill for String.join
     public static String stringJoin(String delimiter, String[] list) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -8,6 +8,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -48,7 +49,9 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 // DummyActivity does nothing about presenting any UI
@@ -122,6 +125,7 @@ public class DummyActivity extends Activity {
 
     private boolean mIsProfileOwner = false;
     private DevicePolicyManager mPolicyManager = null;
+    private List<String> mInstalledBefore = null;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -317,6 +321,15 @@ public class DummyActivity extends Activity {
         if (getIntent().hasExtra("package")) {
             uri = Uri.fromParts("package", getIntent().getStringExtra("package"), null);
         }
+        // Remember which apps exist right now, so that we can detect and
+        // hide the app(s) installed by this activity afterwards
+        if (mIsProfileOwner && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
+            mInstalledBefore = new ArrayList<>();
+            for (ApplicationInfo app : getPackageManager().getInstalledApplications(
+                    PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
+                mInstalledBefore.add(app.packageName);
+            }
+        }
         StrictMode.VmPolicy policy = StrictMode.getVmPolicy();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O || getIntent().hasExtra("direct_install_apk")) {
             if (getIntent().hasExtra("apk")) {
@@ -454,21 +467,7 @@ public class DummyActivity extends Activity {
         // everything stays runnable from inside Haven only
         if (resultCode == Activity.RESULT_OK && mIsProfileOwner
                 && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
-            String pkg = getIntent().getStringExtra("package");
-            if (pkg == null) {
-                pkg = getIntent().getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME);
-            }
-            if (pkg == null && (getIntent().hasExtra("direct_install_apk") || getIntent().hasExtra("apk"))) {
-                // Direct APK install path where the package name is unknown;
-                // fall back to the most recently installed app.
-                // Uninstall flows never carry these extras, so they are safe here.
-                pkg = Utility.findLatestInstalledPackage(this);
-            }
-            if (pkg != null && !pkg.equals(getPackageName())) {
-                mPolicyManager.setApplicationHidden(
-                        new ComponentName(this, HavenDeviceAdminReceiver.class),
-                        pkg, true);
-            }
+            hideNewlyInstalledApps();
         }
 
         if (!getIntent().hasExtra("callback")) return;
@@ -485,6 +484,38 @@ public class DummyActivity extends Activity {
         }
 
         finish();
+    }
+
+    // Hide the apps that were installed during this activity's lifetime
+    // from the launcher, so that everything stays runnable from inside Haven
+    private void hideNewlyInstalledApps() {
+        String pkg = getIntent().getStringExtra("package");
+        if (pkg == null) {
+            pkg = getIntent().getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME);
+        }
+        if (pkg != null) {
+            // The installed app is known
+            if (!pkg.equals(getPackageName())) {
+                mPolicyManager.setApplicationHidden(
+                        new ComponentName(this, HavenDeviceAdminReceiver.class),
+                        pkg, true);
+            }
+            return;
+        }
+
+        // The package is unknown (e.g. direct APK install); hide any app
+        // that appeared after we captured the snapshot.
+        // Uninstall flows never capture a snapshot, so they are safe here.
+        if (mInstalledBefore == null) return;
+        Set<String> before = new HashSet<>(mInstalledBefore);
+        for (ApplicationInfo app : getPackageManager().getInstalledApplications(
+                PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES)) {
+            if (!before.contains(app.packageName) && !app.packageName.equals(getPackageName())) {
+                mPolicyManager.setApplicationHidden(
+                        new ComponentName(this, HavenDeviceAdminReceiver.class),
+                        app.packageName, true);
+            }
+        }
     }
 
     private void actionUnfreezeAndLaunch() {
