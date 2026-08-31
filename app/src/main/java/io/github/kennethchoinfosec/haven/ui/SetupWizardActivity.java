@@ -129,8 +129,10 @@ public class SetupWizardActivity extends AppCompatActivity {
     private void setupProfile() {
         final boolean allowed =
                 mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE);
+        final boolean deviceSecure =
+                ((android.app.KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE)).isDeviceSecure();
         android.util.Log.i("HavenSetup", "setupProfile() called. provisioningAllowed=" + allowed
-                + " deviceSecure=" + mPolicyManager.isDeviceSecure()
+                + " deviceSecure=" + deviceSecure
                 + " profileOwner=" + mPolicyManager.isProfileOwnerApp(getPackageName()));
         if (!allowed) {
             switchToFragment(new FailedFragment(), false);
