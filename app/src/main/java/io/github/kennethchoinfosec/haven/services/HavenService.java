@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 
 public class HavenService extends Service {
     public static final int RESULT_CANNOT_INSTALL_SYSTEM_APP = 100001;
+    public static final int RESULT_INJECTION_UNSUPPORTED = 100002;
 
     private static final int NOTIFICATION_ID = 0x49a11;
     private DevicePolicyManager mPolicyManager = null;
@@ -167,6 +168,42 @@ public class HavenService extends Service {
                     callback.callback(RESULT_CANNOT_INSTALL_SYSTEM_APP);
                 }
             }
+        }
+
+        @Override
+        public void installAppWithLibrary(ApplicationInfoWrapper app, UriForwardProxy libUri,
+                                          IAppInstallCallback callback) throws RemoteException {
+            // Clone an app like installApp(), but additionally forward a user-selected
+            // native library that DummyActivity will inject into the clone.
+            if (app.isSystem()) {
+                callback.callback(RESULT_CANNOT_INSTALL_SYSTEM_APP);
+                return;
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                // The injection repack uses the PackageInstaller session flow which is Q+.
+                callback.callback(RESULT_INJECTION_UNSUPPORTED);
+                return;
+            }
+            Intent intent = new Intent(DummyActivity.INSTALL_PACKAGE);
+            intent.setComponent(new ComponentName(HavenService.this, DummyActivity.class));
+            intent.putExtra("package", app.getPackageName());
+            intent.putExtra("apk", app.getSourceDir());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                intent.putExtra("split_apks", app.getSplitApks());
+            // Forward the .so Fd into the work profile through the FileProvider proxy.
+            Uri libContentUri = FileProviderProxy.setUriForwardProxy(libUri, "lib");
+            intent.putExtra("inject_lib", libContentUri);
+            intent.putExtra("inject_launch", true);
+
+            // Send the callback to the DummyActivity
+            Bundle callbackExtra = new Bundle();
+            callbackExtra.putBinder("callback", callback.asBinder());
+            intent.putExtra("callback", callbackExtra);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            DummyActivity.registerSameProcessRequest(intent);
+            if (mStartActivityProxy != null)
+                mStartActivityProxy.startActivity(intent);
         }
 
         @Override

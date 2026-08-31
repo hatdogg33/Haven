@@ -41,6 +41,8 @@ import io.github.kennethchoinfosec.haven.util.InstallationProgressListener;
 import io.github.kennethchoinfosec.haven.util.LocalStorageManager;
 import io.github.kennethchoinfosec.haven.util.SettingsManager;
 import io.github.kennethchoinfosec.haven.util.Utility;
+import io.github.kennethchoinfosec.haven.util.inject.ApkPatcher;
+import io.github.kennethchoinfosec.haven.util.inject.InjectSigner;
 
 import java.io.File;
 import java.io.IOException;
@@ -330,10 +332,6 @@ public class DummyActivity extends Activity {
     }
 
     private void actionInstallPackage() {
-        Uri uri = null;
-        if (getIntent().hasExtra("package")) {
-            uri = Uri.fromParts("package", getIntent().getStringExtra("package"), null);
-        }
         // Remember which apps exist right now, so that we can detect and
         // hide the app(s) installed by this activity afterwards
         if (mIsProfileOwner && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
@@ -343,9 +341,90 @@ public class DummyActivity extends Activity {
                 mInstalledBefore.add(app.packageName);
             }
         }
+
+        if (getIntent().hasExtra("inject_lib")) {
+            // A native library must be injected into the cloned APK before install.
+            actionInjectAndInstall();
+            return;
+        }
+
+        continueInstallPackage();
+    }
+
+    private void actionInjectAndInstall() {
+        final String apkPath = getIntent().getStringExtra("apk");
+        final Uri libUri = getIntent().getParcelableExtra("inject_lib");
+        if (apkPath == null || libUri == null) {
+            abortInjectInstall(new Exception("missing apk path or library uri"));
+            return;
+        }
+        final String abi = Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "arm64-v8a";
+        android.util.Log.i("HavenInject", "injecting library into " + apkPath + " abi=" + abi);
+
+        new Thread(() -> {
+            try {
+                File cacheDir = new File(getCacheDir(), "inject");
+                cacheDir.mkdirs();
+
+                File patched;
+                try (InputStream so = getContentResolver().openInputStream(libUri)) {
+                    if (so == null) throw new IOException("cannot open library stream");
+                    patched = ApkPatcher.patch(DummyActivity.this, new File(apkPath), so, abi, cacheDir);
+                }
+                File signedBase = InjectSigner.sign(DummyActivity.this, patched, cacheDir);
+
+                List<String> signedSplits = new ArrayList<>();
+                String[] originalSplits = getIntent().getStringArrayExtra("split_apks");
+                if (originalSplits != null && originalSplits.length > 0) {
+                    for (File f : InjectSigner.signSplits(DummyActivity.this,
+                            Arrays.asList(originalSplits), cacheDir)) {
+                        signedSplits.add(f.getAbsolutePath());
+                    }
+                }
+
+                final String signedBasePath = signedBase.getAbsolutePath();
+                final String[] signedSplitPaths = signedSplits.toArray(new String[0]);
+                runOnUiThread(() -> {
+                    getIntent().putExtra("inject_apk_path", signedBasePath);
+                    if (signedSplitPaths.length > 0) {
+                        getIntent().putExtra("inject_split_paths", signedSplitPaths);
+                    }
+                    continueInstallPackage();
+                });
+            } catch (Throwable t) {
+                android.util.Log.e("HavenInject", "injection failed", t);
+                runOnUiThread(() -> abortInjectInstall(t));
+            }
+        }).start();
+    }
+
+    private void abortInjectInstall(Throwable t) {
+        FileProviderProxy.clearForwardProxy();
+        Toast.makeText(this, getString(R.string.inject_fail, t.getMessage()), Toast.LENGTH_LONG).show();
+        if (getIntent().hasExtra("callback")) {
+            Bundle callbackExtra = getIntent().getBundleExtra("callback");
+            IAppInstallCallback callback = IAppInstallCallback.Stub
+                    .asInterface(callbackExtra.getBinder("callback"));
+            try {
+                callback.callback(Activity.RESULT_CANCELED);
+            } catch (RemoteException ignored) {
+            }
+        }
+        finish();
+    }
+
+    private void continueInstallPackage() {
+        Uri uri = null;
+        if (getIntent().hasExtra("package")) {
+            uri = Uri.fromParts("package", getIntent().getStringExtra("package"), null);
+        }
+
         StrictMode.VmPolicy policy = StrictMode.getVmPolicy();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O || getIntent().hasExtra("direct_install_apk")) {
-            if (getIntent().hasExtra("apk")) {
+            if (getIntent().hasExtra("inject_apk_path")) {
+                // Repackaged, re-signed clone produced by actionInjectAndInstall()
+                uri = Uri.fromFile(new File(getIntent().getStringExtra("inject_apk_path")));
+            } else if (getIntent().hasExtra("apk")) {
                 // I really have no idea about why the "package:" uri do not work
                 // after Android O, anyway we fall back to using the apk path...
                 // Since I have plan to support pre-O in later versions, I keep this
@@ -371,7 +450,7 @@ public class DummyActivity extends Activity {
                 // Although these are available since API 26, we don't need to
                 // take care of them for versions before Q since we don't actually
                 // install the APKs before Q.
-                actionInstallPackageQ(uri, getIntent().getStringArrayExtra("split_apks"));
+                actionInstallPackageQ(uri, getEffectiveSplitApks());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -386,6 +465,15 @@ public class DummyActivity extends Activity {
 
         // Restore the VmPolicy anyway
         StrictMode.setVmPolicy(policy);
+    }
+
+    // During the inject flow, split APKs are re-signed along with the base so
+    // the installer does not reject them for a signature mismatch.
+    private String[] getEffectiveSplitApks() {
+        if (getIntent().hasExtra("inject_split_paths")) {
+            return getIntent().getStringArrayExtra("inject_split_paths");
+        }
+        return getIntent().getStringArrayExtra("split_apks");
     }
 
     // On Android Q, ACTION_INSTALL_PACKAGE has been deprecated.
@@ -476,10 +564,14 @@ public class DummyActivity extends Activity {
         // the other profile. We don't know, but just clean it.
         FileProviderProxy.clearForwardProxy();
 
+        boolean autoLaunch = resultCode == Activity.RESULT_OK
+                && getIntent().getBooleanExtra("inject_launch", false);
+
         // Hide the newly installed app from the launcher, so that
-        // everything stays runnable from inside Haven only
+        // everything stays runnable from inside Haven only.
+        // (Auto-launched injected clones are unhidden by launchInjectedApp().)
         if (resultCode == Activity.RESULT_OK && mIsProfileOwner
-                && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
+                && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled() && !autoLaunch) {
             hideNewlyInstalledApps();
         }
 
@@ -496,7 +588,39 @@ public class DummyActivity extends Activity {
             // do nothing
         }
 
+        if (autoLaunch) {
+            launchInjectedApp();
+            return;
+        }
+
         finish();
+    }
+
+    // Fire up the freshly installed (injected) clone inside the work profile.
+    private void launchInjectedApp() {
+        final String packageName = getIntent().getStringExtra("package");
+        if (packageName == null) {
+            finish();
+            return;
+        }
+        if (mIsProfileOwner) {
+            mPolicyManager.setApplicationHidden(
+                    new ComponentName(this, HavenDeviceAdminReceiver.class),
+                    packageName, false);
+        }
+        final Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
+        if (launchIntent != null) {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    startActivity(launchIntent);
+                } catch (Exception e) {
+                    // The app may refuse to launch (e.g. signature checks)
+                }
+                finish();
+            }, 300);
+        } else {
+            finish();
+        }
     }
 
     // Hide the apps that were installed during this activity's lifetime

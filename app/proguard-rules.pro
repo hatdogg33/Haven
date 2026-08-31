@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Library (de)obfuscation / injection helpers are referenced directly.
+-keep class io.github.kennethchoinfosec.haven.util.inject.** { *; }
+
+# apksig performs reflection-free signing, but keep it intact to be safe and
+# silence any missing-class warnings for its optional internals.
+-keep class com.android.apksig.** { *; }
+-dontwarn com.android.apksig.**

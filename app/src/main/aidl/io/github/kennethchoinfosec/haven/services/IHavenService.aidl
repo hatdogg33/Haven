@@ -16,6 +16,7 @@ interface IHavenService {
     void getApps(IGetAppsCallback callback, boolean showAll);
     void loadIcon(in ApplicationInfoWrapper info, ILoadIconCallback callback);
     void installApp(in ApplicationInfoWrapper app, IAppInstallCallback callback);
+    void installAppWithLibrary(in ApplicationInfoWrapper app, in UriForwardProxy libUri, IAppInstallCallback callback);
     void installApk(in UriForwardProxy uri, IAppInstallCallback callback);
     void uninstallApp(in ApplicationInfoWrapper app, IAppInstallCallback callback);
     void freezeApp(in ApplicationInfoWrapper app);

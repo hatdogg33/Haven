@@ -47,6 +47,11 @@
 
     <!-- App Context Menu -->
     <string name="clone_to_work_profile">Clone to Haven (Work Profile)</string>
+    <string name="clone_inject_so">Clone and inject .so</string>
+    <string name="clone_choice_question">Choose the type of clone to create:</string>
+    <string name="inject_fail">Library injection failed: %1$s</string>
+    <string name="inject_fail_generic">Unable to start injection</string>
+    <string name="inject_fail_unsupported">Library injection requires Android 10+</string>
     <string name="clone_to_main_profile">Clone to Main Profile</string>
     <string name="uninstall_app">Uninstall</string>
     <string name="freeze_app">Freeze</string>

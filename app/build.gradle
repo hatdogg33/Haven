@@ -47,6 +47,69 @@ android {
         aidl = true
     }
     namespace = 'io.github.kennethchoinfosec.haven'
+
+    sourceSets {
+        main {
+            // Bundles the pre-dexed injector wrapper (injector.dex) as a raw resource
+            // so ApkPatcher can place it into cloned APKs at install time.
+            res.srcDirs += 'injectorRes'
+        }
+    }
+}
+
+// Standalone R8 used only to dex the tiny InjectorApp wrapper into injector.dex.
+configurations {
+    injectorD8
+}
+
+def injectorSdkJar = file(
+        "${android.sdkDirectory.get().asFile.absolutePath}/platforms/android-${android.compileSdk}/android.jar")
+
+tasks.register('compileInjector', JavaCompile) {
+    source = fileTree('src/injector/java')
+    include '**/*.java'
+    classpath = files(injectorSdkJar)
+    destinationDirectory = layout.buildDirectory.dir('injector/classes')
+    options.release = 17
+    options.compilerArgs = ['-nowarn', '-Xlint:-options']
+}
+
+def injectorResRaw = file('injectorRes/raw')
+// Ensure the extra res root exists at configuration time (fresh clones).
+injectorResRaw.mkdirs()
+
+tasks.register('dexInjector', JavaExec) {
+    dependsOn 'compileInjector'
+    classpath = configurations.injectorD8
+    mainClass = 'com.android.tools.r8.D8'
+    args '--lib', injectorSdkJar.absolutePath,
+            '--min-api', '24',
+            '--output', injectorResRaw.absolutePath,
+            layout.buildDirectory.dir('injector/classes').get().asFile.absolutePath
+    doFirst {
+        // D8 refuses to run into a non-empty output directory; only remove its
+        // own previous artifacts to preserve keep.xml and other resources.
+        injectorResRaw.mkdirs()
+        injectorResRaw.eachFile {
+            if (it.name == 'classes.dex' || it.name == 'injector.dex') it.delete()
+        }
+    }
+    doLast {
+        File dex = new File(injectorResRaw, 'classes.dex')
+        if (!dex.exists()) {
+            throw new GradleException("D8 did not produce classes.dex")
+        }
+        File target = new File(injectorResRaw, 'injector.dex')
+        if (dex.absolutePath != target.absolutePath) {
+            if (!dex.renameTo(target)) {
+                throw new GradleException('cannot rename injector.dex')
+            }
+        }
+    }
+}
+
+tasks.named('preBuild') {
+    dependsOn 'dexInjector'
 }
 
 dependencies {
@@ -58,6 +121,10 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
     implementation 'com.google.android.material:material:1.14.0-beta01'
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+    // Re-signs the patched clones with the embedded Haven Inject key
+    implementation 'com.android.tools.build:apksig:9.1.1'
+    // Used by dexInjector only; never shipped to the device
+    injectorD8 'com.android.tools:r8:8.3.37'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.7.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'

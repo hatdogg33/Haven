@@ -23,6 +23,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.view.ActionMode;
 import androidx.core.content.ContextCompat;
@@ -41,6 +43,7 @@ import io.github.kennethchoinfosec.haven.services.IHavenService;
 import io.github.kennethchoinfosec.haven.services.HavenService;
 import io.github.kennethchoinfosec.haven.util.ApplicationInfoWrapper;
 import io.github.kennethchoinfosec.haven.util.LocalStorageManager;
+import io.github.kennethchoinfosec.haven.util.UriForwardProxy;
 import io.github.kennethchoinfosec.haven.util.Utility;
 
 import java.util.ArrayList;
@@ -68,6 +71,8 @@ public class AppListFragment extends BaseFragment {
     private boolean mRefreshing = false;
     private Drawable mDefaultIcon = null;
     private ApplicationInfoWrapper mSelectedApp = null;
+    private ApplicationInfoWrapper mInjectApp = null;
+    private ActivityResultLauncher<String[]> mInjectLibraryPicker = null;
 
     // Cache of allowed Cross-profile widget providers
     // Only useful if this fragment manages the work profile
@@ -130,6 +135,9 @@ public class AppListFragment extends BaseFragment {
         IBinder service = getArguments().getBinder("service");
         mService = IHavenService.Stub.asInterface(service);
         mIsRemote = getArguments().getBoolean("is_remote");
+
+        mInjectLibraryPicker = registerForActivityResult(
+                new ActivityResultContracts.OpenDocument(), this::onInjectableLibraryPicked);
     }
 
     @Override
@@ -368,7 +376,16 @@ public class AppListFragment extends BaseFragment {
                                     installOrUninstall(selectedApp, true))
                             .show();
                 } else {
-                    installOrUninstall(mSelectedApp, true);
+                    final ApplicationInfoWrapper selectedApp = mSelectedApp;
+                    new MaterialAlertDialogBuilder(requireContext())
+                            .setTitle(getString(R.string.app_context_menu_title, selectedApp.getLabel()))
+                            .setMessage(R.string.clone_choice_question)
+                            .setPositiveButton(R.string.clone_inject_so, (diag, button) ->
+                                    pickInjectableLibrary(selectedApp))
+                            .setNeutralButton(R.string.clone_to_work_profile, (diag, button) ->
+                                    installOrUninstall(selectedApp, true))
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .show();
                 }
                 return true;
             case MENU_ITEM_UNINSTALL:
@@ -480,6 +497,38 @@ public class AppListFragment extends BaseFragment {
         }
     }
 
+    // Ask the user to pick an arbitrary .so file that will be injected into the clone.
+    private void pickInjectableLibrary(ApplicationInfoWrapper app) {
+        mInjectApp = mSelectedApp;
+        mSelectedApp = null;
+        mInjectLibraryPicker.launch(new String[]{"application/octet-stream", "*/*"});
+    }
+
+    private void onInjectableLibraryPicked(android.net.Uri uri) {
+        if (uri == null) {
+            mInjectApp = null;
+            return;
+        }
+        if (mInjectApp == null) return;
+        final ApplicationInfoWrapper app = mInjectApp;
+        mInjectApp = null;
+
+        UriForwardProxy forwarder = new UriForwardProxy(getContext(), uri);
+        IAppInstallCallback.Stub callback = new IAppInstallCallback.Stub() {
+            @Override
+            public void callback(int result) {
+                runOnUiThread(() ->
+                        installAppCallback(result, app, true));
+            }
+        };
+        try {
+            ((MainActivity) getActivity()).getOtherService(mIsRemote)
+                    .installAppWithLibrary(app, forwarder, callback);
+        } catch (RemoteException e) {
+            Toast.makeText(getContext(), R.string.inject_fail_generic, Toast.LENGTH_LONG).show();
+        }
+    }
+
     void installAppCallback(int result, ApplicationInfoWrapper app, boolean isInstall) {
         if (result == Activity.RESULT_OK) {
             String message = getString(isInstall ? R.string.clone_success : R.string.uninstall_success);
@@ -491,6 +540,8 @@ public class AppListFragment extends BaseFragment {
             Toast.makeText(getContext(),
                     getString(isInstall ? R.string.clone_fail_system_app :
                             R.string.uninstall_fail_system_app), Toast.LENGTH_SHORT).show();
+        } else if (result == HavenService.RESULT_INJECTION_UNSUPPORTED) {
+            Toast.makeText(getContext(), R.string.inject_fail_unsupported, Toast.LENGTH_SHORT).show();
         }
     }
 
