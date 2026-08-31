@@ -342,7 +342,7 @@ public final class BinaryAXML {
         return result;
     }
 
-    private Chunk rebuildPoolChunk() {
+    private Chunk rebuildPoolChunk() throws IOException {
         List<String> strings = mPool.strings;
         ByteArrayOutputStream data = new ByteArrayOutputStream();
         int[] offsets = new int[strings.size()];
