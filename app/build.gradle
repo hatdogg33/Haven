@@ -86,14 +86,21 @@ def injectorResRaw = file('injectorRes/raw')
 // Ensure the extra res root exists at configuration time (fresh clones).
 injectorResRaw.mkdirs()
 
-tasks.register('dexInjector', JavaExec) {
+tasks.register('jarInjector', Jar) {
     dependsOn 'compileInjector'
+    archiveFileName = 'injector.jar'
+    destinationDirectory = layout.buildDirectory.dir('injector/jar')
+    from layout.buildDirectory.dir('injector/classes')
+}
+
+tasks.register('dexInjector', JavaExec) {
+    dependsOn 'jarInjector'
     classpath = configurations.injectorD8
     mainClass = 'com.android.tools.r8.D8'
     args '--lib', injectorSdkJar.absolutePath,
             '--min-api', '24',
             '--output', injectorResRaw.absolutePath,
-            layout.buildDirectory.dir('injector/classes').get().asFile.absolutePath
+            layout.buildDirectory.file('injector/jar/injector.jar').get().asFile.absolutePath
     doFirst {
         // D8 refuses to run into a non-empty output directory; only remove its
         // own previous artifacts to preserve keep.xml and other resources.
