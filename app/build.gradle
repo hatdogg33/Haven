@@ -62,8 +62,16 @@ configurations {
     injectorD8
 }
 
-def injectorSdkJar = file(
-        "${android.sdkDirectory.get().asFile.absolutePath}/platforms/android-${android.compileSdk}/android.jar")
+def injectorSdkRoot = providers.environmentVariable('ANDROID_HOME')
+        .orElse(providers.environmentVariable('ANDROID_SDK_ROOT'))
+        .orNull
+if (injectorSdkRoot == null) {
+    throw new GradleException('ANDROID_HOME must be set to build injector.dex')
+}
+def injectorSdkJar = file("${injectorSdkRoot}/platforms/android-${android.compileSdk}/android.jar")
+if (!injectorSdkJar.exists()) {
+    throw new GradleException("android.jar not found at ${injectorSdkJar}")
+}
 
 tasks.register('compileInjector', JavaCompile) {
     source = fileTree('src/injector/java')
