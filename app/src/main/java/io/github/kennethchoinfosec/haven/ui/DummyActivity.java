@@ -140,6 +140,15 @@ public class DummyActivity extends Activity {
             Utility.enforceUserRestrictions(this);
             SettingsManager.getInstance().applyAll();
 
+            // Hide all work apps from the launcher as early as possible so that
+            // everything is runnable from inside Haven only.
+            // Guards against app upgrades on devices whose launcher otherwise
+            // keeps showing already-cloned work apps.
+            if (SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()
+                    && !LocalStorageManager.getInstance().getBoolean(LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED)) {
+                Utility.hideWorkAppsFromLauncher(this);
+            }
+
             synchronized (DummyActivity.class) {
                 // Do not show permission dialog during finalization -- it will conflict with the provisioning UI
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !sHasRequestedPermission
