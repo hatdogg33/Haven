@@ -39,13 +39,12 @@ public final class InjectSigner {
         for (String path : splitPaths) {
             File src = new File(path);
             File dst = new File(outputDir, "haven-split-" + src.getName());
-            signApk(context, src, dst);
-            result.add(dst);
+            result.add(signApk(context, src, dst));
         }
         return result;
     }
 
-    private static void signApk(Context context, File inputApk, File outputApk) throws Exception {
+    private static File signApk(Context context, File inputApk, File outputApk) throws Exception {
         SignerKeys keys = loadKeys(context);
         ApkSigner.SignerConfig signer = new ApkSigner.SignerConfig.Builder(
                 "HavenInject", keys.privateKey, Collections.singletonList(keys.certificate))
@@ -61,6 +60,7 @@ public final class InjectSigner {
                 .setCreatedBy("Haven Inject")
                 .build()
                 .sign();
+        return outputApk;
     }
 
     private static SignerKeys loadKeys(Context context) throws Exception {
