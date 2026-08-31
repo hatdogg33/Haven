@@ -17,6 +17,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.UserManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -45,12 +46,25 @@ public class SetupWizardActivity extends AppCompatActivity {
     private final ActivityResultLauncher<Void> mProvisionProfile =
             registerForActivityResult(new ProfileProvisionContract(), this::setupProfileCb);
 
+    // Whether we launched the system provisioning UI, and whether we exited via
+    // finishWithResult (vs. the system tearing down the activity/task).
+    private boolean mProvisioningLaunched = false;
+    private boolean mFinishedNormally = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
         android.util.Log.i("HavenSetup", "SetupWizardActivity.onCreate action=" + getIntent().getAction()
                 + " workProfileAvailable=" + Utility.isWorkProfileAvailable(this));
+        UserManager um = getSystemService(UserManager.class);
+        Bundle restrictions = um.getUserRestrictions();
+        android.util.Log.i("HavenSetup", "SetupWizardActivity userRestrictions"
+                + " DISALLOW_ADD_USER=" + restrictions.getBoolean(UserManager.DISALLOW_ADD_USER)
+                + " DISALLOW_ADD_MANAGED_PROFILE=" + restrictions.getBoolean(UserManager.DISALLOW_ADD_MANAGED_PROFILE)
+                + " DISALLOW_MODIFY_ACCOUNTS=" + restrictions.getBoolean(UserManager.DISALLOW_MODIFY_ACCOUNTS)
+                + " userCount=" + um.getUserCount()
+                + " users=[" + android.text.TextUtils.join(",", um.getUserProfiles()) + "]");
         // The user could click on the "finish provisioning" notification while having removed
         // this activity from the recents stack, in which case the notification will start a new
         // instance of activity
@@ -97,18 +111,40 @@ public class SetupWizardActivity extends AppCompatActivity {
                 .commit();
     }
 
+    @Override
+    protected void onDestroy() {
+        android.util.Log.i("HavenSetup", "SetupWizardActivity.onDestroy provisioningLaunched=" + mProvisioningLaunched
+                + " finishedNormally=" + mFinishedNormally
+                + " isFinishing=" + isFinishing());
+        super.onDestroy();
+    }
+
     private void finishWithResult(boolean succeeded) {
+        mFinishedNormally = true;
         android.util.Log.i("HavenSetup", "SetupWizardActivity.finishWithResult succeeded=" + succeeded);
         setResult(succeeded ? RESULT_OK : RESULT_CANCELED);
         finish();
     }
 
     private void setupProfile() {
-        android.util.Log.i("HavenSetup", "setupProfile() called. provisioningAllowed="
-                + mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE));
-        if (!mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE)) {
+        final boolean allowed =
+                mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE);
+        android.util.Log.i("HavenSetup", "setupProfile() called. provisioningAllowed=" + allowed
+                + " deviceSecure=" + mPolicyManager.isDeviceSecure()
+                + " profileOwner=" + mPolicyManager.isProfileOwnerApp(getPackageName()));
+        if (!allowed) {
             switchToFragment(new FailedFragment(), false);
             return;
+        }
+
+        // Diagnostics: what will the system Provisioning UI actually resolve to?
+        Intent probe = createProvisionProfileIntent(this);
+        java.util.List<android.content.pm.ResolveInfo> resolvers =
+                getPackageManager().queryIntentActivities(probe, android.content.pm.PackageManager.MATCH_ALL);
+        android.util.Log.i("HavenSetup", "Provisioning intent resolve count=" + resolvers.size());
+        for (android.content.pm.ResolveInfo r : resolvers) {
+            android.util.Log.i("HavenSetup", "Provisioning target: "
+                    + (r.activityInfo != null ? r.activityInfo.packageName + "/" + r.activityInfo.name : "null"));
         }
 
         // The user may have aborted provisioning before without clearing data
@@ -117,9 +153,12 @@ public class SetupWizardActivity extends AppCompatActivity {
         AuthenticationUtility.reset();
 
         try {
+            mProvisioningLaunched = true;
             mProvisionProfile.launch(null);
         } catch (ActivityNotFoundException e) {
+            mProvisioningLaunched = false;
             // How could this fail???
+            android.util.Log.e("HavenSetup", "Provisioning activity not found", e);
             switchToFragment(new FailedFragment(), false);
         }
     }
@@ -177,15 +216,21 @@ public class SetupWizardActivity extends AppCompatActivity {
         }
     }
 
+    // Build the system provisioning intent. Used both for launching and for
+    // resolution diagnostics in setupProfile().
+    static Intent createProvisionProfileIntent(Context context) {
+        ComponentName admin = new ComponentName(context.getApplicationContext(), HavenDeviceAdminReceiver.class);
+        Intent intent = new Intent(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE);
+        intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_ENCRYPTION, true);
+        intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME, admin);
+        return intent;
+    }
+
     private static class ProfileProvisionContract extends ActivityResultContract<Void, Boolean> {
         @NonNull
         @Override
         public Intent createIntent(@NonNull Context context, Void input) {
-            ComponentName admin = new ComponentName(context.getApplicationContext(), HavenDeviceAdminReceiver.class);
-            Intent intent = new Intent(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE);
-            intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_ENCRYPTION, true);
-            intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME, admin);
-            return intent;
+            return createProvisionProfileIntent(context);
         }
 
         @Override
@@ -400,6 +445,7 @@ public class SetupWizardActivity extends AppCompatActivity {
         @Override
         public void onNavigateNext() {
             super.onNavigateNext();
+            android.util.Log.i("HavenSetup", "ReadyFragment.onNavigateNext: switching to PleaseWait and launching provisioning");
             mActivity.switchToFragment(new PleaseWaitFragment(), false);
             mActivity.setupProfile();
         }

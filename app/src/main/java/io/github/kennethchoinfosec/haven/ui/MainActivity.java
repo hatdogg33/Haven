@@ -140,11 +140,39 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupWizardCb(Boolean result) {
-        android.util.Log.i("HavenSetup", "setupWizardCb: result=" + result);
+        android.util.Log.i("HavenSetup", "setupWizardCb: result=" + result
+                + " workProfileAvailable=" + Utility.isWorkProfileAvailable(this));
         if (result)
             init();
         else
+            setupAborted();
+    }
+
+    // Guard: only auto-relaunch the wizard once per process after an aborted setup,
+    // so a repeated user back-press can still exit instead of looping forever.
+    private boolean mSetupAbortedRelaunched = false;
+
+    private void setupAborted() {
+        android.util.Log.w("HavenSetup", "setupAborted(): wizard ended without success.", new Exception("trace"));
+        mStorage.setBoolean(LocalStorageManager.PREF_IS_SETTING_UP, false);
+        if (Utility.isWorkProfileAvailable(this)) {
+            // Provisioning actually succeeded on a previous attempt; wizard was cancelled for another
+            // reason, so just proceed as if setup completed.
+            init();
+        } else if (!mSetupAbortedRelaunched) {
+            // The system refused / tore down provisioning without creating the work profile.
+            // Do not silently close (black screen); tell the user and relaunch so they can retry.
+            mSetupAbortedRelaunched = true;
+            android.widget.Toast.makeText(this,
+                    "Setup was interrupted by the system and the work profile was not created.\nTapping here will retry.",
+                    android.widget.Toast.LENGTH_LONG).show();
+            mStartSetup.launch(null);
+        } else {
+            android.widget.Toast.makeText(this,
+                    "Setup did not complete. The work profile was not created.",
+                    android.widget.Toast.LENGTH_LONG).show();
             finish();
+        }
     }
 
     private void bindServices() {
