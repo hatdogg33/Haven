@@ -22,6 +22,8 @@ import io.github.kennethchoinfosec.haven.receivers.HavenDeviceAdminReceiver;
 import io.github.kennethchoinfosec.haven.ui.DummyActivity;
 import io.github.kennethchoinfosec.haven.util.ApplicationInfoWrapper;
 import io.github.kennethchoinfosec.haven.util.FileProviderProxy;
+import io.github.kennethchoinfosec.haven.util.LocalStorageManager;
+import io.github.kennethchoinfosec.haven.util.SettingsManager;
 import io.github.kennethchoinfosec.haven.util.UriForwardProxy;
 import io.github.kennethchoinfosec.haven.util.Utility;
 
@@ -152,10 +154,13 @@ public class HavenService extends Service {
                             mAdminComponent,
                             app.getPackageName());
 
-                    // Also set the hidden state to false.
-                    mPolicyManager.setApplicationHidden(
-                            mAdminComponent,
-                            app.getPackageName(), false);
+                    // Keep the app hidden from the launcher if the
+                    // "hide work apps from the launcher" setting is enabled
+                    if (!SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
+                        mPolicyManager.setApplicationHidden(
+                                mAdminComponent,
+                                app.getPackageName(), false);
+                    }
 
                     callback.callback(Activity.RESULT_OK);
                 } else {
@@ -300,6 +305,14 @@ public class HavenService extends Service {
         mPackageManager = getPackageManager();
         mIsProfileOwner = mPolicyManager.isProfileOwnerApp(getPackageName());
         mAdminComponent = new ComponentName(getApplicationContext(), HavenDeviceAdminReceiver.class);
+
+        // One-time migration: when upgrading to a version with "Hide work apps
+        // from the launcher", hide all existing work apps in the profile
+        if (mIsProfileOwner
+                && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()
+                && !LocalStorageManager.getInstance().getBoolean(LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED)) {
+            Utility.hideWorkAppsFromLauncher(this);
+        }
     }
 
     @Nullable

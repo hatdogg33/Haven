@@ -11,6 +11,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ShortcutInfo;
@@ -56,6 +57,47 @@ public class Utility {
     public static boolean isProfileOwner(Context context) {
         return context.getSystemService(DevicePolicyManager.class)
                 .isProfileOwnerApp(context.getPackageName());
+    }
+
+    // Hide all apps in this profile from the launcher, except Haven itself
+    // This allows running everything from inside Haven while keeping
+    // the Work profile (and thus "Work" accounts) fully functional.
+    public static void hideWorkAppsFromLauncher(Context context) {
+        DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
+        ComponentName admin = new ComponentName(context.getApplicationContext(), HavenDeviceAdminReceiver.class);
+        if (!dpm.isProfileOwnerApp(context.getPackageName())) return;
+        PackageManager pm = context.getPackageManager();
+        List<ApplicationInfo> apps = pm.getInstalledApplications(
+                PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+        for (ApplicationInfo app : apps) {
+            if (app.packageName.equals(context.getPackageName())) continue;
+            try {
+                dpm.setApplicationHidden(admin, app.packageName, true);
+            } catch (SecurityException ignored) {
+                // Should not happen when we are the profile owner
+            }
+        }
+        LocalStorageManager.getInstance().setBoolean(
+                LocalStorageManager.PREF_HIDE_WORK_APPS_APPLIED, true);
+    }
+
+    // Find the most recently installed app in this profile, excluding Haven itself
+    @Nullable
+    public static String findLatestInstalledPackage(Context context) {
+        String adminPackage = context.getPackageName();
+        PackageManager pm = context.getPackageManager();
+        List<ApplicationInfo> apps = pm.getInstalledApplications(
+                PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+        long maxTime = Long.MIN_VALUE;
+        String result = null;
+        for (ApplicationInfo app : apps) {
+            if (app.packageName.equals(adminPackage)) continue;
+            if (app.firstInstallTime > maxTime) {
+                maxTime = app.firstInstallTime;
+                result = app.packageName;
+            }
+        }
+        return result;
     }
 
     // Polyfill for String.join

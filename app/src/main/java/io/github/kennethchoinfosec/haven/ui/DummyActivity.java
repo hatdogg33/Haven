@@ -271,6 +271,11 @@ public class DummyActivity extends Activity {
                 Utility.transferIntentToProfileUnsigned(this, intent);
                 startActivity(intent);
             }
+            // Hide all work apps from the launcher by default so that
+            // everything is run from inside Haven only
+            if (SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
+                Utility.hideWorkAppsFromLauncher(this);
+            }
             finish();
         } else {
             // Set the flag telling MainActivity that we have now finished provisioning
@@ -445,6 +450,27 @@ public class DummyActivity extends Activity {
         // the other profile. We don't know, but just clean it.
         FileProviderProxy.clearForwardProxy();
 
+        // Hide the newly installed app from the launcher, so that
+        // everything stays runnable from inside Haven only
+        if (resultCode == Activity.RESULT_OK && mIsProfileOwner
+                && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
+            String pkg = getIntent().getStringExtra("package");
+            if (pkg == null) {
+                pkg = getIntent().getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME);
+            }
+            if (pkg == null && (getIntent().hasExtra("direct_install_apk") || getIntent().hasExtra("apk"))) {
+                // Direct APK install path where the package name is unknown;
+                // fall back to the most recently installed app.
+                // Uninstall flows never carry these extras, so they are safe here.
+                pkg = Utility.findLatestInstalledPackage(this);
+            }
+            if (pkg != null && !pkg.equals(getPackageName())) {
+                mPolicyManager.setApplicationHidden(
+                        new ComponentName(this, HavenDeviceAdminReceiver.class),
+                        pkg, true);
+            }
+        }
+
         if (!getIntent().hasExtra("callback")) return;
 
         // Send the result code back to the caller
@@ -473,9 +499,10 @@ public class DummyActivity extends Activity {
             String packageName = getIntent().getStringExtra("packageName");
             intent.putExtra("packageName", packageName);
             intent.putExtra("shouldFreeze",
-                    SettingsManager.getInstance().getAutoFreezeServiceEnabled() &&
+                    SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled() ||
+                            (SettingsManager.getInstance().getAutoFreezeServiceEnabled() &&
                             LocalStorageManager.getInstance()
-                                .stringListContains(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, packageName));
+                                .stringListContains(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, packageName)));
             if (getIntent().hasExtra("linkedPackages")) {
                 // Multiple apps should be unfrozen here
                 String[] packages = getIntent().getStringExtra("linkedPackages").split(",");
@@ -484,9 +511,10 @@ public class DummyActivity extends Activity {
                 for (int i = 0; i < packages.length; i++) {
                     // Apps in linkedPackages may also need to be auto-frozen
                     // thus, we loop through them and fetch the settings
-                    packagesShouldFreeze[i] = SettingsManager.getInstance().getAutoFreezeServiceEnabled() &&
+                    packagesShouldFreeze[i] = SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled() ||
+                            (SettingsManager.getInstance().getAutoFreezeServiceEnabled() &&
                             LocalStorageManager.getInstance()
-                                    .stringListContains(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, packages[i]);
+                                    .stringListContains(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, packages[i]));
                 }
                 intent.putExtra("linkedPackages", packages);
                 intent.putExtra("linkedPackagesShouldFreeze", packagesShouldFreeze);
@@ -632,6 +660,12 @@ public class DummyActivity extends Activity {
             // Refresh profile policies because
             // settings may have been changed
             Utility.enforceWorkProfilePolicies(this);
+            // Hide all work apps from the launcher immediately when the
+            // corresponding setting is toggled on
+            if (LocalStorageManager.PREF_HIDE_WORK_APPS_FROM_LAUNCHER.equals(name)
+                    && SettingsManager.getInstance().getHideWorkAppsFromLauncherEnabled()) {
+                Utility.hideWorkAppsFromLauncher(this);
+            }
         }
         finish();
     }

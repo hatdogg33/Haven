@@ -137,4 +137,19 @@ public class SettingsManager {
                 enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP);
     }
+
+    // Set the enabled state of hiding work apps from the launcher
+    public void setHideWorkAppsFromLauncherEnabled(boolean enabled) {
+        mStorage.setBoolean(LocalStorageManager.PREF_HIDE_WORK_APPS_FROM_LAUNCHER, enabled);
+        syncSettingsToProfileBool(LocalStorageManager.PREF_HIDE_WORK_APPS_FROM_LAUNCHER, enabled);
+    }
+
+    // Get the enabled state of hiding work apps from the launcher
+    // This is enabled by default
+    public boolean getHideWorkAppsFromLauncherEnabled() {
+        if (!mStorage.contains(LocalStorageManager.PREF_HIDE_WORK_APPS_FROM_LAUNCHER)) {
+            return true;
+        }
+        return mStorage.getBoolean(LocalStorageManager.PREF_HIDE_WORK_APPS_FROM_LAUNCHER);
+    }
 }

@@ -38,6 +38,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Prefer
     private static final String SETTINGS_PATREON = "settings_patreon";
     private static final String SETTINGS_CROSS_PROFILE_FILE_CHOOSER = "settings_cross_profile_file_chooser";
     private static final String SETTINGS_BLOCK_CONTACTS_SEARCHING = "settings_block_contacts_searching";
+    private static final String SETTINGS_HIDE_WORK_APPS = "settings_hide_work_apps";
     private static final String SETTINGS_AUTO_FREEZE_SERVICE = "settings_auto_freeze_service";
     private static final String SETTINGS_AUTO_FREEZE_DELAY = "settings_auto_freeze_delay";
     private static final String SETTINGS_SKIP_FOREGROUND = "settings_dont_freeze_foreground";
@@ -50,6 +51,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Prefer
 
     private CheckBoxPreference mPrefCrossProfileFileChooser = null;
     private CheckBoxPreference mPrefBlockContactsSearching = null;
+    private CheckBoxPreference mPrefHideWorkApps = null;
     private CheckBoxPreference mPrefAutoFreezeService = null;
     private CheckBoxPreference mPrefSkipForeground = null;
     private CheckBoxPreference mPrefPaymentStub = null;
@@ -95,6 +97,9 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Prefer
         mPrefCrossProfileFileChooser = (CheckBoxPreference) findPreference(SETTINGS_CROSS_PROFILE_FILE_CHOOSER);
         mPrefCrossProfileFileChooser.setChecked(mManager.getCrossProfileFileChooserEnabled());
         mPrefCrossProfileFileChooser.setOnPreferenceChangeListener(this);
+        mPrefHideWorkApps = (CheckBoxPreference) findPreference(SETTINGS_HIDE_WORK_APPS);
+        mPrefHideWorkApps.setChecked(mManager.getHideWorkAppsFromLauncherEnabled());
+        mPrefHideWorkApps.setOnPreferenceChangeListener(this);
         mPrefBlockContactsSearching = (CheckBoxPreference) findPreference(SETTINGS_BLOCK_CONTACTS_SEARCHING);
         mPrefBlockContactsSearching.setChecked(mManager.getBlockContactsSearchingEnabled());
         mPrefBlockContactsSearching.setOnPreferenceChangeListener(this);
@@ -197,6 +202,9 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Prefer
             return true;
         } else if (preference == mPrefBlockContactsSearching) {
             mManager.setBlockContactsSearchingEnabled((boolean) newState);
+            return true;
+        } else if (preference == mPrefHideWorkApps) {
+            mManager.setHideWorkAppsFromLauncherEnabled((boolean) newState);
             return true;
         } else if (preference == mPrefAutoFreezeService) {
             mManager.setAutoFreezeServiceEnabled((boolean) newState);

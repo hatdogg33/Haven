@@ -19,6 +19,8 @@ public class LocalStorageManager {
     public static final String PREF_AUTO_FREEZE_DELAY = "auto_freeze_delay";
     public static final String PREF_BLOCK_CONTACTS_SEARCHING = "block_contacts_searching";
     public static final String PREF_PAYMENT_STUB = "payment_stub";
+    public static final String PREF_HIDE_WORK_APPS_FROM_LAUNCHER = "hide_work_apps_from_launcher";
+    public static final String PREF_HIDE_WORK_APPS_APPLIED = "hide_work_apps_applied";
 
     private static final String LIST_DIVIDER = ",";
 
@@ -48,6 +50,10 @@ public class LocalStorageManager {
 
     public boolean getBoolean(String pref) {
         return mPrefs.getBoolean(pref, false);
+    }
+
+    public boolean contains(String pref) {
+        return mPrefs.contains(pref);
     }
 
     public void setBoolean(String pref, boolean value) {
