@@ -59,7 +59,13 @@ public class InjectorApp extends Application {
                         if (instance instanceof Application) {
                             mOriginal = (Application) instance;
                             try {
-                                mOriginal.attachBaseContext(base);
+                                // attachBaseContext is protected; call it reflectively
+                                // so the original Application can bind its resources.
+                                java.lang.reflect.Method attach =
+                                        Application.class.getDeclaredMethod(
+                                                "attachBaseContext", Context.class);
+                                attach.setAccessible(true);
+                                attach.invoke(mOriginal, base);
                             } catch (Throwable t) {
                                 // Some frameworks forbid reflection into attachBaseContext
                             }
