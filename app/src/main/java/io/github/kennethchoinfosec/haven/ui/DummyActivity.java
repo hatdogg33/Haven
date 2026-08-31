@@ -133,6 +133,8 @@ public class DummyActivity extends Activity {
 
         mPolicyManager = getSystemService(DevicePolicyManager.class);
         mIsProfileOwner = mPolicyManager.isProfileOwnerApp(getPackageName());
+        android.util.Log.i("HavenSetup", "DummyActivity.onCreate action=" + getIntent().getAction()
+                + " isProfileOwner=" + mIsProfileOwner);
         if (mIsProfileOwner) {
             // If we are the profile owner, we enforce all our policies
             // so that we can make sure those are updated with our app
@@ -271,6 +273,7 @@ public class DummyActivity extends Activity {
     }
 
     private void actionFinalizeProvision() {
+        android.util.Log.i("HavenSetup", "actionFinalizeProvision isProfileOwner=" + mIsProfileOwner);
         if (mIsProfileOwner) {
             // Only notify the main profile on pre-Oreo
             // After Oreo, since we use the activity-based finalization flow,

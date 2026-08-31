@@ -72,6 +72,8 @@ public class Utility {
 // launcher, ...) must NEVER be hidden: doing so breaks the work profile and
 // can leave the user staring at a black screen with GMS gone.
 public static void hideWorkAppsFromLauncher(Context context) {
+    android.util.Log.i("HavenSetup", "hideWorkAppsFromLauncher() called. profileOwner="
+            + context.getSystemService(DevicePolicyManager.class).isProfileOwnerApp(context.getPackageName()));
     DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
     ComponentName admin = new ComponentName(context.getApplicationContext(), HavenDeviceAdminReceiver.class);
     if (!dpm.isProfileOwnerApp(context.getPackageName())) return;
@@ -79,6 +81,10 @@ public static void hideWorkAppsFromLauncher(Context context) {
     Set<String> defaultHomes = getDefaultHomePackages(context);
     List<ApplicationInfo> apps = pm.getInstalledApplications(
             PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
+    int hidden = 0;
+    int restored = 0;
+    StringBuilder hiddenLog = new StringBuilder();
+    StringBuilder restoredLog = new StringBuilder();
     for (ApplicationInfo app : apps) {
         if (app.packageName.equals(context.getPackageName())) continue;
         boolean isSystem = (app.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
@@ -86,6 +92,8 @@ public static void hideWorkAppsFromLauncher(Context context) {
             // Restore system apps and the default launcher to a visible state
             try {
                 dpm.setApplicationHidden(admin, app.packageName, false);
+                restored++;
+                restoredLog.append(app.packageName).append(',');
             } catch (SecurityException ignored) {
                 // Should not happen when we are the profile owner
             }
@@ -93,10 +101,14 @@ public static void hideWorkAppsFromLauncher(Context context) {
         }
         try {
             dpm.setApplicationHidden(admin, app.packageName, true);
+            hidden++;
+            hiddenLog.append(app.packageName).append(',');
         } catch (SecurityException ignored) {
             // Should not happen when we are the profile owner
         }
     }
+    android.util.Log.i("HavenSetup", "hideWorkAppsFromLauncher done. hidden=" + hidden + " [" + hiddenLog + "] restored="
+            + restored + " [" + restoredLog + "]");
     LocalStorageManager.getInstance().setInt(
             LocalStorageManager.PREF_HIDE_WORK_APPS_VERSION, HIDE_WORK_APPS_VERSION);
 }

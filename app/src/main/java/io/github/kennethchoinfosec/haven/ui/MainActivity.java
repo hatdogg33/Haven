@@ -121,6 +121,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void init() {
+        android.util.Log.i("HavenSetup", "init(): has_setup=" + mStorage.getBoolean(LocalStorageManager.PREF_HAS_SETUP)
+                + " is_setting_up=" + mStorage.getBoolean(LocalStorageManager.PREF_IS_SETTING_UP)
+                + " workProfileAvailable=" + Utility.isWorkProfileAvailable(this)
+                + " profileOwner=" + getSystemService(DevicePolicyManager.class).isProfileOwnerApp(getPackageName()));
         if (mStorage.getBoolean(LocalStorageManager.PREF_IS_SETTING_UP) && !Utility.isWorkProfileAvailable(this)) {
             // System has already finished provisioning, but Haven still
             // needs to be brought up inside the work profile
@@ -136,6 +140,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupWizardCb(Boolean result) {
+        android.util.Log.i("HavenSetup", "setupWizardCb: result=" + result);
         if (result)
             init();
         else

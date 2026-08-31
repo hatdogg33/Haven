@@ -49,6 +49,8 @@ public class SetupWizardActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
+        android.util.Log.i("HavenSetup", "SetupWizardActivity.onCreate action=" + getIntent().getAction()
+                + " workProfileAvailable=" + Utility.isWorkProfileAvailable(this));
         // The user could click on the "finish provisioning" notification while having removed
         // this activity from the recents stack, in which case the notification will start a new
         // instance of activity
@@ -76,6 +78,8 @@ public class SetupWizardActivity extends AppCompatActivity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        android.util.Log.i("HavenSetup", "SetupWizardActivity.onNewIntent action=" + intent.getAction()
+                + " workProfileAvailable=" + Utility.isWorkProfileAvailable(this));
         // DummyActivity will start this activity with an empty intent
         // once the provision is finalized
         if (ACTION_PROFILE_PROVISIONED.equals(intent.getAction()) && Utility.isWorkProfileAvailable(this))
@@ -94,11 +98,14 @@ public class SetupWizardActivity extends AppCompatActivity {
     }
 
     private void finishWithResult(boolean succeeded) {
+        android.util.Log.i("HavenSetup", "SetupWizardActivity.finishWithResult succeeded=" + succeeded);
         setResult(succeeded ? RESULT_OK : RESULT_CANCELED);
         finish();
     }
 
     private void setupProfile() {
+        android.util.Log.i("HavenSetup", "setupProfile() called. provisioningAllowed="
+                + mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE));
         if (!mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE)) {
             switchToFragment(new FailedFragment(), false);
             return;
@@ -118,6 +125,8 @@ public class SetupWizardActivity extends AppCompatActivity {
     }
 
     private void setupProfileCb(Boolean result) {
+        android.util.Log.i("HavenSetup", "setupProfileCb: result=" + result
+                + " workProfileAvailable=" + Utility.isWorkProfileAvailable(this));
         if (result) {
             if (Utility.isWorkProfileAvailable(this)) {
                 // On Oreo and later versions, since we make use of the activity intent
